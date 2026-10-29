@@ -32,7 +32,11 @@ def cliente(tmp_path, monkeypatch):
 def test_health_y_estados(cliente):
     assert cliente.get("/api/mapas/health").json() == {"ok": True, "servicio": "mapas"}
     estados = cliente.get("/api/mapas/estados").json()
-    assert len(estados) == 32 and {"cve": "09", "nombre": "Ciudad de México"} in estados
+    assert len(estados) == 32
+    por_cve = {e["cve"]: e for e in estados}
+    assert por_cve["09"]["nombre"] == "Ciudad de México" and por_cve["09"]["con_datos"] is True
+    assert por_cve["05"]["con_datos"] is False  # only the states loaded in the database say True
+    assert all(14 < e["lat"] < 33 and -118 < e["lng"] < -86 for e in estados)  # centers fall in Mexico
 
 
 def test_las_rutas_solo_existen_bajo_el_prefijo(cliente):

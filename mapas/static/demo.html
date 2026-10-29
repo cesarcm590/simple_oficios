@@ -104,14 +104,40 @@
     );
   });
 
+  let estados = [];
+  const estadoActual = () => estados.find((e) => e.cve === $("sel-estado").value);
+  const conDatos = () => estados.filter((e) => e.con_datos).map((e) => e.nombre).join(", ") || "ninguno";
+
   async function cargarEstados() {
     const r = await fetch(`${API}/estados`);
-    const lista = await r.json();
-    $("sel-estado").innerHTML = lista.map((e) => `<option value="${e.cve}" ${e.cve === "09" ? "selected" : ""}>${e.nombre}</option>`).join("");
+    estados = await r.json();
+    $("sel-estado").innerHTML = estados.map((e) =>
+      `<option value="${e.cve}" ${e.cve === "09" ? "selected" : ""}>${esc(e.nombre)}${e.con_datos ? "" : " (sin datos aún)"}</option>`).join("");
   }
+
+  function limpiar() {
+    capa.clearLayers(); $("lista").innerHTML = "";
+    if (circulo) { map.removeLayer(circulo); circulo = null; }
+  }
+
+  $("sel-estado").addEventListener("change", () => {
+    const e = estadoActual();
+    if (!e) return;
+    map.flyTo([e.lat, e.lng], 11);
+    ponerPunto(e.lat, e.lng);
+    limpiar();
+    if (e.con_datos) buscar();
+    else $("estado").textContent = `Todavía no hay talleres cargados de ${e.nombre}. Por ahora hay datos de: ${conDatos()}.`;
+  });
 
   async function buscar() {
     if (!punto) { $("estado").textContent = "Primero toca el mapa para elegir un punto."; return; }
+    const e = estadoActual();
+    if (e && !e.con_datos) {
+      limpiar();
+      $("estado").textContent = `Todavía no hay talleres cargados de ${e.nombre}. Por ahora hay datos de: ${conDatos()}.`;
+      return;
+    }
     const cats = [...document.querySelectorAll(".checks input:checked")].map((c) => c.value).join(",");
     const params = new URLSearchParams({ estado: $("sel-estado").value, lat: punto.lat, lng: punto.lng,
       radio_km: $("radio").value, limite: 15 });
@@ -121,8 +147,7 @@
     const r = await fetch(`${API}/talleres?${params}`);
     if (!r.ok) { const e = await r.json().catch(() => ({})); $("estado").textContent = `Error ${r.status}: ${e.detail || ""}`; return; }
     const datos = await r.json();
-    capa.clearLayers(); $("lista").innerHTML = "";
-    if (circulo) map.removeLayer(circulo);
+    limpiar();
     circulo = L.circle([punto.lat, punto.lng], { radius: $("radio").value * 1000, color: "#0f6e56", weight: 1, fillOpacity: 0.04 }).addTo(map);
     $("estado").textContent = datos.length ? `${datos.length} talleres a menos de ${$("radio").value} km` : "No hay talleres con esos filtros en ese radio.";
     datos.forEach((t) => {

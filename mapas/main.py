@@ -13,7 +13,7 @@ from fastapi import APIRouter, FastAPI, HTTPException, Query  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
-from tools.estados import ESTADOS, resolver_estado  # noqa: E402
+from tools.estados import CAPITALES, ESTADOS, resolver_estado  # noqa: E402
 
 PREFIJO = "/api/mapas"
 app = FastAPI(title="Simple Oficios · mapas")
@@ -46,7 +46,11 @@ def health():
 
 @router.get("/estados")
 def estados():
-    return [{"cve": cve, "nombre": nombre} for cve, nombre in ESTADOS.items()]
+    """The 32 states with a map center (their capital) and whether shops are loaded for them."""
+    from tools.talleres_denue import estados_con_datos
+    con_datos = estados_con_datos()
+    return [{"cve": cve, "nombre": nombre, "lat": CAPITALES[cve][0], "lng": CAPITALES[cve][1],
+             "con_datos": cve in con_datos} for cve, nombre in ESTADOS.items()]
 
 
 @router.get("/talleres")

@@ -25,6 +25,18 @@ def _ruta_db() -> Path:
     raise FileNotFoundError("no hay base del directorio DENUE; ver tools/build_prod_data.py")
 
 
+def estados_con_datos() -> set[str]:
+    """State codes that have shops loaded; empty when no database is available."""
+    try:
+        db = sqlite3.connect(f"file:{_ruta_db()}?mode=ro", uri=True)
+    except (FileNotFoundError, sqlite3.OperationalError):
+        return set()
+    try:
+        return {fila[0] for fila in db.execute("select distinct entidad from talleres")}
+    finally:
+        db.close()
+
+
 @tool
 def buscar_talleres_directorio(estado: str, lat: float, lng: float, radio_km: float = 5,
                                limite: int = 10, categorias: list[str] | None = None,
