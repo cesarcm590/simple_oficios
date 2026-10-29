@@ -63,3 +63,9 @@ def test_solicitud_sin_modelo_configurado_responde_503(cliente, monkeypatch):
     main.orquestador.cache_clear()
     r = cliente.post("/api/mapas/solicitud", json={"mensaje": "me falla el freno", "lat": 19.4, "lng": -99.1})
     assert r.status_code == 503
+
+
+def test_pagina_demo(cliente):
+    r = cliente.get("/api/mapas/demo")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
+    assert "OpenStreetMap contributors" in r.text and "/estados" in r.text
