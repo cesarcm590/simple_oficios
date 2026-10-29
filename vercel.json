@@ -1,16 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "services": {
-    "web": {
-      "root": "./"
-    },
     "mapas": {
       "root": "mapas/",
       "entrypoint": "main:app"
     }
   },
   "rewrites": [
-    { "source": "/api/mapas/(.*)", "destination": { "service": "mapas" } },
-    { "source": "/(.*)", "destination": { "service": "web" } }
+    { "source": "/(.*)", "destination": { "service": "mapas" } }
   ]
 }

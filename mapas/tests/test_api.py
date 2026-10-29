@@ -26,6 +26,7 @@ def cliente(tmp_path, monkeypatch):
     con.commit()
     con.close()
     monkeypatch.setattr(talleres_denue, "RUTAS", [ruta])
+    monkeypatch.setattr(talleres_denue, "DIR_PROD", tmp_path / "sin_archivos_de_produccion")
     return TestClient(main.app)
 
 
@@ -73,3 +74,8 @@ def test_pagina_demo(cliente):
     r = cliente.get("/api/mapas/demo")
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
     assert "OpenStreetMap contributors" in r.text and "/estados" in r.text
+
+
+def test_la_raiz_lleva_a_la_demo(cliente):
+    r = cliente.get("/", follow_redirects=False)
+    assert r.status_code in (302, 307) and r.headers["location"] == "/api/mapas/demo"

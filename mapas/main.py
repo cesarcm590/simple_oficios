@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query  # noqa: E402
-from fastapi.responses import FileResponse  # noqa: E402
+from fastapi.responses import FileResponse, RedirectResponse  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 from tools.estados import CAPITALES, ESTADOS, resolver_estado  # noqa: E402
@@ -31,6 +31,12 @@ def orquestador():
     """Built on first use, so health and directory routes work without an LLM key."""
     from agents.orquestador import crear_orquestador
     return crear_orquestador()
+
+
+@app.get("/", include_in_schema=False)
+def raiz():
+    """The site root opens the demo, so the bare Vercel link is useful on its own."""
+    return RedirectResponse(f"{PREFIJO}/demo")
 
 
 @router.get("/demo", include_in_schema=False)

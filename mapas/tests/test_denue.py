@@ -117,3 +117,63 @@ def test_carga_desde_csv_latin1(tmp_path, monkeypatch):
     assert con.execute("select count(*) from talleres").fetchone()[0] == 2  # non-8111 row skipped
     assert con.execute("select nombre, entidad, categoria from talleres where clee='0900AAA'").fetchone() == (
         "Taller Ñandú", "09", "mecanica")
+
+
+def test_descarga_masiva_por_estado(tmp_path, monkeypatch):
+    """The bulk loader downloads, extracts, loads and cleans up; here with a fake zip."""
+    import io
+    import zipfile as zf
+
+    from tools import denue_bulk
+
+    columnas = ["id", "clee", "nom_estab", "raz_social", "codigo_act", "nombre_act", "per_ocu", "nom_vial",
+                "numero_ext", "nomb_asent", "cod_postal", "cve_ent", "entidad", "municipio", "telefono",
+                "correoelec", "www", "latitud", "longitud", "fecha_alta"]
+    filas = [{"id": "1", "clee": "05000AAA", "nom_estab": "Taller Saltillo", "raz_social": "", "codigo_act": "811111",
+              "nombre_act": "x", "per_ocu": "0 a 5", "nom_vial": "C", "numero_ext": "1", "nomb_asent": "CENTRO",
+              "cod_postal": "25000", "cve_ent": "05", "entidad": "COAHUILA", "municipio": "SALTILLO",
+              "telefono": "", "correoelec": "", "www": "", "latitud": "25.42", "longitud": "-101.0",
+              "fecha_alta": "2020-01"}]
+    texto = io.StringIO()
+    escritor = csv.DictWriter(texto, fieldnames=columnas, quoting=csv.QUOTE_ALL)
+    escritor.writeheader()
+    escritor.writerows(filas)
+    zip_falso = tmp_path / "falso.zip"
+    with zf.ZipFile(zip_falso, "w") as z:
+        z.writestr("conjunto_de_datos/denue_inegi_05_.csv", texto.getvalue().encode("latin-1"))
+        z.writestr("diccionario_de_datos/dic.csv", "x")
+
+    monkeypatch.setattr(denue_load, "DB", tmp_path / "denue.sqlite")
+    pedidos = []
+    monkeypatch.setattr(denue_bulk, "descargar", lambda cve, destino, parte=None: pedidos.append(parte or cve) or zip_falso)
+    denue_bulk.main(["--estado", "coahuila"])
+    con = sqlite3.connect(tmp_path / "denue.sqlite")
+    assert con.execute("select nombre, entidad from talleres").fetchall() == [("Taller Saltillo", "05")]
+
+    # A state published in two files downloads both parts and adds up their rows.
+    monkeypatch.setitem(denue_bulk.PARTES, "05", ["05_1", "05_2"])
+    assert denue_bulk.archivos_de("05") == ["05_1", "05_2"] and denue_bulk.archivos_de("09") == ["09"]
+    assert denue_bulk.archivos_de("15") == ["15_1", "15_2"]
+    pedidos.clear()
+    assert denue_bulk.cargar_estado(sqlite3.connect(tmp_path / "denue.sqlite"), "05") == 2
+    assert pedidos == ["05_1", "05_2"]
+
+
+def test_archivos_de_produccion_por_estado(db_con_datos, tmp_path, monkeypatch):
+    """Production reads one slim file per state, with no contact columns."""
+    from tools import build_prod_data
+
+    destino = tmp_path / "prod"
+    origen = sqlite3.connect(db_con_datos)
+    assert build_prod_data.construir(origen, "09", destino) == 5
+    assert build_prod_data.construir(origen, "15", destino) == 1
+    cols = [c[1] for c in sqlite3.connect(destino / "denue_09.sqlite").execute("pragma table_info(talleres)")]
+    assert not ({"telefono", "correo", "sitio", "razon_social"} & set(cols))
+
+    monkeypatch.setattr(talleres_denue, "RUTAS", [tmp_path / "no_hay_base_de_desarrollo.sqlite"])
+    monkeypatch.setattr(talleres_denue, "DIR_PROD", destino)
+    assert talleres_denue.estados_con_datos() == {"09", "15"}
+    res = talleres_denue.buscar_talleres_directorio("cdmx", 19.4195, -99.1627, radio_km=10)
+    assert [r["nombre"] for r in res] == ["Taller Uno", "Llantera Cercana"]
+    with pytest.raises(FileNotFoundError):
+        talleres_denue.buscar_talleres_directorio("jalisco", 20.66, -103.35)

@@ -14,27 +14,33 @@ from tools.mecanicos_db import _km
 from tools.scian import CATEGORIAS_POR_DEFECTO
 
 _DATOS = Path(__file__).resolve().parent.parent / "data"
-# Development database first (all columns, git-ignored); then the slim file that ships to production.
-RUTAS = [_DATOS / "denue" / "denue_talleres.sqlite", _DATOS / "prod" / "denue_cdmx.sqlite"]
+# Development database (every state, all columns, git-ignored). When it exists it is used for all states.
+RUTAS = [_DATOS / "denue" / "denue_talleres.sqlite"]
+# Production ships one slim file per state: denue_<cve>.sqlite (see tools/build_prod_data.py).
+DIR_PROD = _DATOS / "prod"
 
 
-def _ruta_db() -> Path:
+def _ruta_db(entidad: str) -> Path:
     for ruta in RUTAS:
         if ruta.exists():
             return ruta
-    raise FileNotFoundError("no hay base del directorio DENUE; ver tools/build_prod_data.py")
+    por_estado = DIR_PROD / f"denue_{entidad}.sqlite"
+    if por_estado.exists():
+        return por_estado
+    raise FileNotFoundError(f"no hay datos del directorio DENUE para el estado {entidad}")
 
 
 def estados_con_datos() -> set[str]:
     """State codes that have shops loaded; empty when no database is available."""
-    try:
-        db = sqlite3.connect(f"file:{_ruta_db()}?mode=ro", uri=True)
-    except (FileNotFoundError, sqlite3.OperationalError):
-        return set()
-    try:
-        return {fila[0] for fila in db.execute("select distinct entidad from talleres")}
-    finally:
-        db.close()
+    claves = {p.stem.removeprefix("denue_") for p in DIR_PROD.glob("denue_??.sqlite")}
+    for ruta in RUTAS:
+        if ruta.exists():
+            db = sqlite3.connect(f"file:{ruta}?mode=ro", uri=True)
+            try:
+                claves |= {fila[0] for fila in db.execute("select distinct entidad from talleres")}
+            finally:
+                db.close()
+    return claves
 
 
 @tool
@@ -68,7 +74,7 @@ def buscar_talleres_directorio(estado: str, lat: float, lng: float, radio_km: fl
     if especialidad:
         sql += " and especialidad = ?"
         params.append(especialidad)
-    db = sqlite3.connect(f"file:{_ruta_db()}?mode=ro", uri=True)
+    db = sqlite3.connect(f"file:{_ruta_db(entidad)}?mode=ro", uri=True)
     try:
         filas = db.execute(sql, params).fetchall()
     finally:
